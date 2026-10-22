@@ -1733,6 +1733,84 @@ falai.post('/generate', async (request, response) => {
     }
 });
 
+const vercel = express.Router();
+
+vercel.post('/models', async (request, response) => {
+    try {
+        const result = await fetch('https://ai-gateway.vercel.sh/v1/models');
+
+        if (!result.ok) {
+            console.warn('Vercel AI Gateway returned an error.', result.statusText);
+            return response.sendStatus(500);
+        }
+
+        /** @type {any} */
+        const data = await result.json();
+        const models = Array.isArray(data?.data)
+            ? data.data.filter(m => m?.type === 'image').map(m => ({ value: m.id, text: m.name ? `${m.name} (${m.id})` : m.id }))
+            : [];
+
+        return response.send(models);
+    } catch (error) {
+        console.error('Error fetching Vercel AI Gateway models', error);
+        return response.sendStatus(500);
+    }
+});
+
+vercel.post('/generate', async (request, response) => {
+    try {
+        const key = readSecret(request.user.directories, SECRET_KEYS.VERCEL);
+
+        if (!key) {
+            console.warn('Vercel AI Gateway key not found.');
+            return response.sendStatus(400);
+        }
+
+        const requestBody = {
+            prompt: request.body.prompt,
+            model: request.body.model,
+            size: request.body.size,
+            n: 1,
+            response_format: 'b64_json',
+        };
+
+        console.debug('Vercel AI Gateway request:', requestBody);
+
+        const result = await fetch('https://ai-gateway.vercel.sh/v1/images/generations', {
+            method: 'POST',
+            body: JSON.stringify(requestBody),
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`,
+            },
+        });
+
+        if (!result.ok) {
+            const text = await result.text();
+            console.warn('Vercel AI Gateway returned an error.', text);
+            return response.status(500).send(text);
+        }
+
+        /** @type {any} */
+        const data = await result.json();
+        const encodedImage = String(data?.data?.[0]?.b64_json || '');
+        if (!encodedImage) {
+            console.warn('Vercel AI Gateway returned invalid data.');
+            return response.sendStatus(500);
+        }
+
+        const dataUrlMatch = encodedImage.match(/^data:(.+);base64,(.+)$/);
+        const mimeType = dataUrlMatch?.[1] || 'image/png';
+        const format = mime.extension(mimeType) || 'png';
+        const image = dataUrlMatch?.[2] || encodedImage;
+
+        return response.send({ image, format });
+    } catch (error) {
+        console.error('Error communicating with Vercel AI Gateway', error);
+        return response.sendStatus(500);
+    }
+});
+
 const xai = express.Router();
 
 xai.post('/generate', async (request, response) => {
@@ -2210,6 +2288,7 @@ router.use('/nanogpt', nanogpt);
 router.use('/bfl', bfl);
 router.use('/falai', falai);
 router.use('/xai', xai);
+router.use('/vercel', vercel);
 router.use('/aimlapi', aimlapi);
 router.use('/zai', zai);
 router.use('/workersai', workersai);

@@ -91,6 +91,7 @@ const sources = {
     bfl: 'bfl',
     falai: 'falai',
     xai: 'xai',
+    vercel: 'vercel',
     google: 'google',
     zai: 'zai',
     openrouter: 'openrouter',
@@ -1732,6 +1733,7 @@ async function loadSamplers() {
             samplers = ['N/A'];
             break;
         case sources.xai:
+        case sources.vercel:
             samplers = ['N/A'];
             break;
         case sources.google:
@@ -1987,6 +1989,9 @@ async function loadModels() {
         case sources.xai:
             models = await loadXAIModels();
             break;
+        case sources.vercel:
+            models = await loadVercelModels();
+            break;
         case sources.google:
             models = await loadGoogleModels();
             break;
@@ -2110,6 +2115,21 @@ async function loadFalaiModels() {
     const result = await fetch('/api/sd/falai/models', {
         method: 'POST',
         headers: getRequestHeaders({ omitContentType: true }),
+    });
+
+    if (result.ok) {
+        return await result.json();
+    }
+
+    return [];
+}
+
+async function loadVercelModels() {
+    $('#sd_vercel_key').toggleClass('success', !!secret_state[SECRET_KEYS.VERCEL]);
+
+    const result = await fetch('/api/sd/vercel/models', {
+        method: 'POST',
+        headers: getRequestHeaders(),
     });
 
     if (result.ok) {
@@ -2629,6 +2649,7 @@ async function loadSchedulers() {
             schedulers = ['N/A'];
             break;
         case sources.xai:
+        case sources.vercel:
             schedulers = ['N/A'];
             break;
         case sources.google:
@@ -2752,6 +2773,7 @@ async function loadVaes() {
             vaes = ['N/A'];
             break;
         case sources.xai:
+        case sources.vercel:
             vaes = ['N/A'];
             break;
         case sources.google:
@@ -3405,6 +3427,9 @@ async function sendGenerationRequest(generationType, prompt, additionalNegativeP
                 break;
             case sources.xai:
                 result = await generateXAIImage(prefixedPrompt, negativePrompt, signal);
+                break;
+            case sources.vercel:
+                result = await generateVercelImage(prefixedPrompt, signal);
                 break;
             case sources.google:
                 result = await generateGoogleImage(prefixedPrompt, negativePrompt, signal);
@@ -4495,6 +4520,43 @@ async function generateBflImage(prompt, signal) {
  * @param {AbortSignal} signal An AbortSignal object that can be used to cancel the request.
  * @returns {Promise<{format: string, data: string}>} A promise that resolves when the image generation and processing are complete.
  */
+/**
+ * Generates an image using the Vercel AI Gateway (OpenAI-compatible images endpoint).
+ * @param {string} prompt - The main instruction used to guide the image generation.
+ * @param {AbortSignal} signal - An AbortSignal object that can be used to cancel the request.
+ * @returns {Promise<{format: string, data: string}>} - A promise that resolves when the image generation and processing are complete.
+ */
+async function generateVercelImage(prompt, signal) {
+    let width = extension_settings.sd.width;
+    let height = extension_settings.sd.height;
+
+    // OpenAI image models only accept a few fixed sizes.
+    if (/^openai\//.test(extension_settings.sd.model)) {
+        const aspectRatio = width / height;
+        width = aspectRatio > 1 ? 1536 : 1024;
+        height = aspectRatio < 1 ? 1536 : 1024;
+    }
+
+    const result = await fetch('/api/sd/vercel/generate', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        signal: signal,
+        body: JSON.stringify({
+            prompt: prompt,
+            model: extension_settings.sd.model,
+            size: `${width}x${height}`,
+        }),
+    });
+
+    if (result.ok) {
+        const data = await result.json();
+        return { format: data.format, data: data.image };
+    } else {
+        const text = await result.text();
+        throw new Error(text);
+    }
+}
+
 async function generateXAIImage(prompt, _negativePrompt, signal) {
     let aspectRatio;
     let resolution;
@@ -5123,6 +5185,8 @@ function isValidState() {
             return secret_state[SECRET_KEYS.FALAI];
         case sources.xai:
             return secret_state[SECRET_KEYS.XAI];
+        case sources.vercel:
+            return secret_state[SECRET_KEYS.VERCEL];
         case sources.google:
             return secret_state[SECRET_KEYS.MAKERSUITE] || secret_state[SECRET_KEYS.VERTEXAI] || secret_state[SECRET_KEYS.VERTEXAI_SERVICE_ACCOUNT];
         case sources.zai:
