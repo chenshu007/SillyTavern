@@ -77,6 +77,7 @@ const API_COHERE_V1 = 'https://api.cohere.ai/v1';
 const API_COHERE_V2 = 'https://api.cohere.ai/v2';
 const API_PERPLEXITY = 'https://api.perplexity.ai';
 const API_GROQ = 'https://api.groq.com/openai/v1';
+const API_VERCEL = 'https://ai-gateway.vercel.sh/v1';
 const API_MAKERSUITE = 'https://generativelanguage.googleapis.com';
 const API_VERTEX_AI = 'https://us-central1-aiplatform.googleapis.com';
 const API_AI21 = 'https://api.ai21.com/studio/v1';
@@ -1840,6 +1841,10 @@ router.post('/status', async function (request, statusResponse) {
             apiUrl = API_GROQ;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.GROQ, request.body.secret_id);
             headers = {};
+        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL) {
+            apiUrl = API_VERCEL;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);
+            headers = {};
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {
             apiUrl = API_COMETAPI;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);
@@ -2087,6 +2092,10 @@ router.post('/status', async function (request, statusResponse) {
 
             if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.POLLINATIONS && Array.isArray(data)) {
                 data = { data: data.map(model => ({ id: model.name, ...model })) };
+            }
+
+            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL && Array.isArray(data?.data)) {
+                data.data = data.data.filter(model => model?.type === 'language');
             }
 
             if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CHUTES && Array.isArray(data?.data)) {
@@ -2540,6 +2549,11 @@ router.post('/generate', async function (request, response) {
             request.body.json_schema
                 ? setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema)
                 : addAssistantPrefix(request.body.messages, [], 'partial');
+        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL) {
+            apiUrl = API_VERCEL;
+            apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);
+            headers = {};
+            bodyParams = {};
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {
             apiUrl = API_COMETAPI;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);

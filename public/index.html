@@ -697,7 +697,7 @@
                                         </span>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai,vercel">
                                     <div class="range-block-title" data-i18n="Temperature">
                                         Temperature
                                     </div>
@@ -710,7 +710,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai,vercel">
                                     <div class="range-block-title" data-i18n="Frequency Penalty">
                                         Frequency Penalty
                                     </div>
@@ -723,7 +723,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai,vercel">
                                     <div class="range-block-title" data-i18n="Presence Penalty">
                                         Presence Penalty
                                     </div>
@@ -749,7 +749,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai,vercel">
                                     <div class="range-block-title" data-i18n="Top P">
                                         Top P
                                     </div>
@@ -989,7 +989,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,openrouter,mistralai,custom,cohere,groq,electronhub,chutes,nanogpt,xai,pollinations,aimlapi,makersuite,vertexai,azure_openai,workers_ai">
+                                <div class="range-block" data-source="openai,openrouter,mistralai,custom,cohere,groq,electronhub,chutes,nanogpt,xai,pollinations,aimlapi,makersuite,vertexai,azure_openai,workers_ai,vercel">
                                     <div class="range-block-title justifyLeft" data-i18n="Seed">
                                         Seed
                                     </div>
@@ -2000,7 +2000,7 @@
                                             </b>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,cohere,mistralai,custom,claude,aimlapi,openrouter,groq,siliconflow,minimax,deepseek,makersuite,vertexai,ai21,xai,pollinations,moonshot,fireworks,cometapi,electronhub,chutes,azure_openai,zai,nanogpt,workers_ai">
+                                    <div class="range-block" data-source="openai,cohere,mistralai,custom,claude,aimlapi,openrouter,groq,siliconflow,minimax,deepseek,makersuite,vertexai,ai21,xai,pollinations,moonshot,fireworks,cometapi,electronhub,chutes,azure_openai,zai,nanogpt,workers_ai,vercel">
                                         <label for="openai_function_calling" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_function_calling" type="checkbox" />
                                             <span data-i18n="Enable function calling">Enable function calling</span>
@@ -2938,6 +2938,7 @@
                                 <option value="electronhub">Electron Hub</option>
                                 <option value="fireworks">Fireworks AI</option>
                                 <option value="groq">Groq</option>
+                                <option value="vercel">Vercel AI Gateway</option>
                                 <option value="makersuite">Google AI Studio</option>
                                 <option value="vertexai">Google Vertex AI</option>
                                 <option value="mistralai">MistralAI</option>
@@ -3539,6 +3540,20 @@
                                 </select>
                             </div>
                         </form>
+                        <div id="vercel_form" data-source="vercel">
+                            <h4><a href="https://vercel.com/docs/ai-gateway" target="_blank" rel="noopener noreferrer">Vercel AI Gateway API Key</a></h4>
+                            <div class="flex-container">
+                                <input id="api_key_vercel" name="api_key_vercel" class="text_pole flex1" value="" type="text" autocomplete="off">
+                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_vercel"></div>
+                            </div>
+                            <div data-for="api_key_vercel" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
+                                For privacy reasons, your API key will be hidden after you click 'Connect'.
+                            </div>
+                            <h4>Vercel AI Gateway Model</h4>
+                            <select id="model_vercel_select">
+                                <option value="openai/gpt-5-mini">openai/gpt-5-mini</option>
+                            </select>
+                        </div>
                         <div id="groq_form" data-source="groq">
                             <h4 data-i18n="Groq API Key">Groq API Key</h4>
                             <div class="flex-container">

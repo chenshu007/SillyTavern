@@ -672,6 +672,7 @@ export class ToolManager {
             chat_completion_sources.MOONSHOT,
             chat_completion_sources.FIREWORKS,
             chat_completion_sources.COMETAPI,
+            chat_completion_sources.VERCEL,
             chat_completion_sources.CHUTES,
             chat_completion_sources.ELECTRONHUB,
             chat_completion_sources.AZURE_OPENAI,

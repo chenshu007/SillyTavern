@@ -196,6 +196,7 @@ export const chat_completion_sources = {
     MOONSHOT: 'moonshot',
     FIREWORKS: 'fireworks',
     COMETAPI: 'cometapi',
+    VERCEL: 'vercel',
     AZURE_OPENAI: 'azure_openai',
     ZAI: 'zai',
     SILICONFLOW: 'siliconflow',
@@ -346,6 +347,7 @@ export const settingsToUpdate = {
     moonshot_model: ['#model_moonshot_select', 'moonshot_model', false, true],
     fireworks_model: ['#model_fireworks_select', 'fireworks_model', false, true],
     cometapi_model: ['#model_cometapi_select', 'cometapi_model', false, true],
+    vercel_model: ['#model_vercel_select', 'vercel_model', false, true],
     custom_model: ['#custom_model_id', 'custom_model', false, true],
     custom_url: ['#custom_api_url_text', 'custom_url', false, true],
     custom_include_body: ['#custom_include_body', 'custom_include_body', false, true],
@@ -461,6 +463,7 @@ const default_settings = {
     pollinations_model: 'openai',
     pollinations_endpoint: POLLINATIONS_ENDPOINT.AUTHENTICATED,
     cometapi_model: 'gpt-4o',
+    vercel_model: 'openai/gpt-5-mini',
     moonshot_model: 'kimi-latest',
     fireworks_model: 'accounts/fireworks/models/kimi-k2-instruct',
     zai_model: 'glm-4.6',
@@ -1765,6 +1768,8 @@ export function getChatCompletionModel(settings = null) {
             return settings.pollinations_model;
         case chat_completion_sources.COMETAPI:
             return settings.cometapi_model;
+        case chat_completion_sources.VERCEL:
+            return settings.vercel_model;
         case chat_completion_sources.MOONSHOT:
             return settings.moonshot_model;
         case chat_completion_sources.FIREWORKS:
@@ -2285,6 +2290,24 @@ function saveModelList(data) {
         $('#model_groq_select').val(oai_settings.groq_model).trigger('change');
     }
 
+    if (oai_settings.chat_completion_source === chat_completion_sources.VERCEL) {
+        $('#model_vercel_select').empty();
+        model_list.forEach((model) => {
+            $('#model_vercel_select').append(
+                $('<option>', {
+                    value: model.id,
+                    text: model.id,
+                }));
+        });
+
+        const selectedModel = model_list.find(model => model.id === oai_settings.vercel_model);
+        if (model_list.length > 0 && (!selectedModel || !oai_settings.vercel_model)) {
+            oai_settings.vercel_model = model_list[0].id;
+        }
+
+        $('#model_vercel_select').val(oai_settings.vercel_model).trigger('change');
+    }
+
     if (oai_settings.chat_completion_source === chat_completion_sources.SILICONFLOW) {
         $('#model_siliconflow_select').empty();
         model_list.forEach((model) => {
@@ -2725,6 +2748,7 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.CUSTOM,
         chat_completion_sources.COHERE,
         chat_completion_sources.GROQ,
+        chat_completion_sources.VERCEL,
         chat_completion_sources.ELECTRONHUB,
         chat_completion_sources.NANOGPT,
         chat_completion_sources.XAI,
@@ -3288,7 +3312,7 @@ export function getStreamingReply(data, state, { chatCompletionSource = null, ov
             }
         });
         return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
-    } else if ([chat_completion_sources.CUSTOM, chat_completion_sources.POLLINATIONS, chat_completion_sources.AIMLAPI, chat_completion_sources.MOONSHOT, chat_completion_sources.COMETAPI, chat_completion_sources.ELECTRONHUB, chat_completion_sources.NANOGPT, chat_completion_sources.ZAI, chat_completion_sources.SILICONFLOW, chat_completion_sources.CHUTES, chat_completion_sources.WORKERS_AI, chat_completion_sources.FIREWORKS].includes(chat_completion_source)) {
+    } else if ([chat_completion_sources.CUSTOM, chat_completion_sources.POLLINATIONS, chat_completion_sources.AIMLAPI, chat_completion_sources.MOONSHOT, chat_completion_sources.COMETAPI, chat_completion_sources.ELECTRONHUB, chat_completion_sources.NANOGPT, chat_completion_sources.ZAI, chat_completion_sources.SILICONFLOW, chat_completion_sources.CHUTES, chat_completion_sources.WORKERS_AI, chat_completion_sources.FIREWORKS, chat_completion_sources.VERCEL].includes(chat_completion_source)) {
         if (show_thoughts) {
             state.reasoning +=
                 data.choices?.filter(x => x?.delta?.reasoning_content)?.[0]?.delta?.reasoning_content ??
@@ -5559,6 +5583,15 @@ async function onModelChange() {
         oai_settings.groq_model = value;
     }
 
+    if ($(this).is('#model_vercel_select')) {
+        if (!value || !hasModelsLoaded) {
+            console.debug('Null Vercel AI Gateway model selected. Ignoring.');
+            return;
+        }
+        console.log('Vercel AI Gateway model changed to', value);
+        oai_settings.vercel_model = value;
+    }
+
     if ($(this).is('#model_siliconflow_select')) {
         if (!value) {
             console.debug('Null SiliconFlow model selected. Ignoring.');
@@ -5819,6 +5852,14 @@ async function onModelChange() {
         $('#temp_openai').attr('max', oai_max_temp).val(oai_settings.temp_openai).trigger('input');
     }
 
+    if (oai_settings.chat_completion_source == chat_completion_sources.VERCEL) {
+        $('#openai_max_context').attr('max', unlocked_max);
+        oai_settings.openai_max_context = Math.min(Number($('#openai_max_context').attr('max')), oai_settings.openai_max_context);
+        $('#openai_max_context').val(oai_settings.openai_max_context).trigger('input');
+        oai_settings.temp_openai = Math.min(oai_max_temp, oai_settings.temp_openai);
+        $('#temp_openai').attr('max', oai_max_temp).val(oai_settings.temp_openai).trigger('input');
+    }
+
     if (oai_settings.chat_completion_source == chat_completion_sources.AI21) {
         if (oai_settings.max_context_unlocked) {
             $('#openai_max_context').attr('max', unlocked_max);
@@ -6059,6 +6100,7 @@ async function onConnectButtonClick(e) {
         [chat_completion_sources.MOONSHOT]: { key: SECRET_KEYS.MOONSHOT, selector: '#api_key_moonshot', proxy: true },
         [chat_completion_sources.FIREWORKS]: { key: SECRET_KEYS.FIREWORKS, selector: '#api_key_fireworks', proxy: false },
         [chat_completion_sources.COMETAPI]: { key: SECRET_KEYS.COMETAPI, selector: '#api_key_cometapi', proxy: false },
+        [chat_completion_sources.VERCEL]: { key: SECRET_KEYS.VERCEL, selector: '#api_key_vercel', proxy: false },
         [chat_completion_sources.AZURE_OPENAI]: { key: SECRET_KEYS.AZURE_OPENAI, selector: '#api_key_azure_openai', proxy: false },
         [chat_completion_sources.ZAI]: { key: SECRET_KEYS.ZAI, selector: '#api_key_zai', proxy: true },
         [chat_completion_sources.CHUTES]: { key: SECRET_KEYS.CHUTES, selector: '#api_key_chutes', proxy: false },
@@ -6126,6 +6168,8 @@ function toggleChatCompletionForms() {
         $('#model_perplexity_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.GROQ) {
         $('#model_groq_select').trigger('change');
+    } else if (oai_settings.chat_completion_source == chat_completion_sources.VERCEL) {
+        $('#model_vercel_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.CHUTES) {
         $('#model_chutes_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.SILICONFLOW) {
@@ -7365,6 +7409,7 @@ export function initOpenAI() {
     $('#model_cohere_select').on('change', onModelChange);
     $('#model_perplexity_select').on('change', onModelChange);
     $('#model_groq_select').on('change', onModelChange);
+    $('#model_vercel_select').on('change', onModelChange);
     $('#model_chutes_select').on('change', onModelChange);
     $('#model_siliconflow_select').on('change', onModelChange);
     $('#model_minimax_select').on('change', onModelChange);
