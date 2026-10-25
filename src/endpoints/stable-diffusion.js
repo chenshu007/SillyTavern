@@ -1736,13 +1736,24 @@ falai.post('/generate', async (request, response) => {
 
 const vercel = express.Router();
 
+// The page asks for this list on every load and the gateway takes ~1.4 s to answer, so keep
+// it for 10 minutes. The list is public (no key), so one copy serves all users. If a refresh
+// fails, the last good list is served.
+const VERCEL_MODELS_TTL = 10 * 60 * 1000;
+/** @type {{time: number, models: {value: string, text: string}[]} | null} */
+let vercelModelsCache = null;
+
 vercel.post('/models', async (request, response) => {
+    if (vercelModelsCache && Date.now() - vercelModelsCache.time < VERCEL_MODELS_TTL) {
+        return response.send(vercelModelsCache.models);
+    }
+
     try {
         const result = await fetch('https://ai-gateway.vercel.sh/v1/models');
 
         if (!result.ok) {
             console.warn('Vercel AI Gateway returned an error.', result.statusText);
-            return response.sendStatus(500);
+            return vercelModelsCache ? response.send(vercelModelsCache.models) : response.sendStatus(500);
         }
 
         /** @type {any} */
@@ -1751,10 +1762,13 @@ vercel.post('/models', async (request, response) => {
             ? data.data.filter(m => m?.type === 'image').map(m => ({ value: m.id, text: m.name ? `${m.name} (${m.id})` : m.id }))
             : [];
 
+        if (models.length) {
+            vercelModelsCache = { time: Date.now(), models };
+        }
         return response.send(models);
     } catch (error) {
         console.error('Error fetching Vercel AI Gateway models', error);
-        return response.sendStatus(500);
+        return vercelModelsCache ? response.send(vercelModelsCache.models) : response.sendStatus(500);
     }
 });
 
