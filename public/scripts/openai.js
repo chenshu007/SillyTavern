@@ -3152,6 +3152,46 @@ export async function createGenerationParameters(settings, model, type, messages
     return { generate_data, stream, canMultiSwipe };
 }
 
+// LOCAL PATCH: tell the user why a reply stopped early (see patches/patch_vercel.py).
+const STOP_REASONS_NORMAL = ['STOP', 'FINISH_REASON_UNSPECIFIED', 'stop', 'tool_calls', 'function_call', 'end_turn', 'eos'];
+const STOP_REASONS_LENGTH = ['MAX_TOKENS', 'length'];
+const STOP_REASONS_FILTER = ['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'IMAGE_SAFETY', 'content_filter'];
+
+/**
+ * Remembers the finish reason and prompt block reason from a Gemini or OpenAI-style response chunk.
+ * @param {object} data Parsed response or stream chunk
+ * @param {object} state Object to store `stopReason` and `blockReason` in
+ */
+function trackStopReason(data, state) {
+    const reason = data?.candidates?.[0]?.finishReason ?? data?.choices?.[0]?.finish_reason;
+    if (reason) state.stopReason = reason;
+    const blocked = data?.promptFeedback?.blockReason;
+    if (blocked) state.blockReason = blocked;
+}
+
+/**
+ * Shows a toast when a reply was cut short by the length limit or a content filter.
+ * @param {{stopReason?: string, blockReason?: string}} state Reasons collected by trackStopReason
+ */
+function notifyStopReason({ stopReason, blockReason }) {
+    const options = { timeOut: 15000, extendedTimeOut: 5000 };
+    if (blockReason) {
+        toastr.warning(`提示词被服务商拦截（${blockReason}），没有生成内容。可以修改上一条消息后重试，或换用其他模型。`, '回复被中断', options);
+        return;
+    }
+    if (!stopReason || STOP_REASONS_NORMAL.includes(stopReason)) return;
+    if (STOP_REASONS_LENGTH.includes(stopReason)) {
+        toastr.warning(`回复达到“最大回复长度”（${oai_settings.openai_max_tokens} token，思考过程也计入），后面的内容被截断。可以点“继续”，或调大“最大回复长度”。`, '回复被截断', options);
+    } else if (STOP_REASONS_FILTER.includes(stopReason)) {
+        toastr.warning(`回复被服务商的内容过滤中断（${stopReason}）。这类过滤无法通过安全设置关闭，可以重试、修改上一条消息，或换用其他模型。`, '回复被中断', options);
+    } else if (stopReason === 'RECITATION') {
+        toastr.warning('回复因疑似复述受版权保护的内容被中断（RECITATION）。可以重试或换个说法。', '回复被中断', options);
+    } else if (/^[A-Z_]+$/.test(stopReason)) {
+        // Other Gemini reasons (OTHER, MALFORMED_FUNCTION_CALL, ...); OpenAI-style values vary too much to report.
+        toastr.warning(`回复异常结束（${stopReason}）。`, '回复被中断', options);
+    }
+}
+
 /**
  * Send a chat completion request to backend
  * @param {string} type Request type (impersonate, quiet, continue, etc)
@@ -3194,11 +3234,18 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             const state = { reasoning: '', images: [], signature: '', toolSignatures: {} };
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) return;
+                if (done) {
+                    type !== 'quiet' && notifyStopReason(state);
+                    return;
+                }
                 const rawData = value.data;
-                if (rawData === '[DONE]') return;
+                if (rawData === '[DONE]') {
+                    type !== 'quiet' && notifyStopReason(state);
+                    return;
+                }
                 tryParseStreamingError(response, rawData);
                 const parsed = JSON.parse(rawData);
+                trackStopReason(parsed, state);
 
                 if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                     const swipeIndex = parsed.choices[0].index - 1;
@@ -3223,6 +3270,12 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             const message = getChatCompletionErrorMessage(data, response);
             toastr.error(message, t`API returned an error`);
             throw new Error(message);
+        }
+
+        if (type !== 'quiet') {
+            const stopState = {};
+            trackStopReason(data, stopState);
+            notifyStopReason(stopState);
         }
 
         if (type !== 'quiet') {

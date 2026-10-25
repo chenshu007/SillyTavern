@@ -782,7 +782,7 @@ async function sendMakerSuiteRequest(request, response) {
             }
 
             // Wrap it back to OAI format (responseContent includes thought signatures in parts array)
-            const reply = { choices: [{ 'message': { 'content': responseText } }], responseContent };
+            const reply = { choices: [{ 'message': { 'content': responseText }, 'finish_reason': candidates[0].finishReason }], responseContent };
             return response.send(reply);
         }
     } catch (error) {
