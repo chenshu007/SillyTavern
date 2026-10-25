@@ -11,6 +11,20 @@
     <meta name="darkreader-lock">
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#333">
+    <meta name="st-sw" content="60b3b5a6e870">
+    <script>
+        // LOCAL PATCH: register the static-file cache (public/sw.js). Needs HTTPS or localhost.
+        if ('serviceWorker' in navigator) {
+            let hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (hadController && window.toastr) toastr.info('SillyTavern 已更新，刷新页面后生效');
+                hadController = true;
+            });
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js', { scope: '/' }).catch(e => console.warn('[SW] register failed', e));
+            });
+        }
+    </script>
     <style>
         /* Put critical CSS here. The rest should go in stylesheets. */
         body {
