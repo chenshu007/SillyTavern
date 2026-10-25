@@ -4537,7 +4537,7 @@ async function generateVercelImage(prompt, signal) {
         height = aspectRatio < 1 ? 1536 : 1024;
     }
 
-    const result = await fetch('/api/sd/vercel/generate', {
+    const start = await fetch('/api/sd/vercel/generate', {
         method: 'POST',
         headers: getRequestHeaders(),
         signal: signal,
@@ -4548,13 +4548,49 @@ async function generateVercelImage(prompt, signal) {
         }),
     });
 
-    if (result.ok) {
-        const data = await result.json();
-        return { format: data.format, data: data.image };
-    } else {
-        const text = await result.text();
+    if (!start.ok) {
+        const text = await start.text();
         throw new Error(text);
     }
+
+    // The server runs the generation as a job; poll with short requests, because
+    // one request held open for the whole generation gets cut off by the tunnel at 60 s.
+    const { id } = await start.json();
+    const startedAt = Date.now();
+    let failures = 0;
+
+    while (Date.now() - startedAt < 10 * 60 * 1000) {
+        await delay(3000);
+        signal?.throwIfAborted();
+
+        let result;
+        try {
+            result = await fetch('/api/sd/vercel/result', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                signal: signal,
+                body: JSON.stringify({ id }),
+            });
+        } catch (error) {
+            if (signal?.aborted || ++failures > 5) {
+                throw error;
+            }
+            continue;
+        }
+
+        if (!result.ok) {
+            const text = await result.text();
+            throw new Error(text || result.statusText);
+        }
+
+        const data = await result.json();
+        if (data.status === 'done') {
+            return { format: data.format, data: data.image };
+        }
+        failures = 0;
+    }
+
+    throw new Error('Vercel AI Gateway image generation timed out after 10 minutes.');
 }
 
 async function generateXAIImage(prompt, _negativePrompt, signal) {

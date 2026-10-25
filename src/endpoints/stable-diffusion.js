@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import express from 'express';
 import fetch from 'node-fetch';
@@ -1757,6 +1758,55 @@ vercel.post('/models', async (request, response) => {
     }
 });
 
+// Image generation runs as a background job: /generate starts it and returns an id,
+// the browser polls /result. A single request held open for the whole generation gets
+// cut off by the Cloudflare tunnel path at 60 s.
+/** @type {Map<string, {owner: string, created: number, status: 'pending'|'done'|'error', image?: string, format?: string, error?: string}>} */
+const vercelJobs = new Map();
+const VERCEL_JOB_TTL = 15 * 60 * 1000;
+
+async function runVercelJob(job, key, requestBody) {
+    try {
+        const result = await fetch('https://ai-gateway.vercel.sh/v1/images/generations', {
+            method: 'POST',
+            body: JSON.stringify(requestBody),
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`,
+            },
+        });
+
+        if (!result.ok) {
+            const text = await result.text();
+            console.warn('Vercel AI Gateway returned an error.', text);
+            job.error = text || result.statusText;
+            job.status = 'error';
+            return;
+        }
+
+        /** @type {any} */
+        const data = await result.json();
+        const encodedImage = String(data?.data?.[0]?.b64_json || '');
+        if (!encodedImage) {
+            console.warn('Vercel AI Gateway returned invalid data.');
+            job.error = 'Vercel AI Gateway returned invalid data.';
+            job.status = 'error';
+            return;
+        }
+
+        const dataUrlMatch = encodedImage.match(/^data:(.+);base64,(.+)$/);
+        const mimeType = dataUrlMatch?.[1] || 'image/png';
+        job.format = mime.extension(mimeType) || 'png';
+        job.image = dataUrlMatch?.[2] || encodedImage;
+        job.status = 'done';
+        console.debug('Vercel AI Gateway job done:', requestBody.model, `${Math.round((Date.now() - job.created) / 1000)}s`);
+    } catch (error) {
+        console.error('Error communicating with Vercel AI Gateway', error);
+        job.error = String(error?.message || error);
+        job.status = 'error';
+    }
+}
+
 vercel.post('/generate', async (request, response) => {
     try {
         const key = readSecret(request.user.directories, SECRET_KEYS.VERCEL);
@@ -1774,41 +1824,43 @@ vercel.post('/generate', async (request, response) => {
             response_format: 'b64_json',
         };
 
-        console.debug('Vercel AI Gateway request:', requestBody);
-
-        const result = await fetch('https://ai-gateway.vercel.sh/v1/images/generations', {
-            method: 'POST',
-            body: JSON.stringify(requestBody),
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${key}`,
-            },
-        });
-
-        if (!result.ok) {
-            const text = await result.text();
-            console.warn('Vercel AI Gateway returned an error.', text);
-            return response.status(500).send(text);
+        for (const [id, job] of vercelJobs) {
+            if (Date.now() - job.created > VERCEL_JOB_TTL) {
+                vercelJobs.delete(id);
+            }
         }
 
-        /** @type {any} */
-        const data = await result.json();
-        const encodedImage = String(data?.data?.[0]?.b64_json || '');
-        if (!encodedImage) {
-            console.warn('Vercel AI Gateway returned invalid data.');
-            return response.sendStatus(500);
-        }
+        const id = randomUUID();
+        const job = { owner: request.user.profile.handle, created: Date.now(), status: /** @type {const} */ ('pending') };
+        vercelJobs.set(id, job);
 
-        const dataUrlMatch = encodedImage.match(/^data:(.+);base64,(.+)$/);
-        const mimeType = dataUrlMatch?.[1] || 'image/png';
-        const format = mime.extension(mimeType) || 'png';
-        const image = dataUrlMatch?.[2] || encodedImage;
+        console.debug('Vercel AI Gateway request:', id, requestBody);
+        runVercelJob(job, key, requestBody);
 
-        return response.send({ image, format });
+        return response.send({ id });
     } catch (error) {
         console.error('Error communicating with Vercel AI Gateway', error);
         return response.sendStatus(500);
     }
+});
+
+vercel.post('/result', async (request, response) => {
+    const job = vercelJobs.get(String(request.body.id));
+
+    if (!job || job.owner !== request.user.profile.handle) {
+        return response.status(404).send('Vercel AI Gateway job not found (expired, or SillyTavern restarted).');
+    }
+
+    if (job.status === 'error') {
+        return response.status(500).send(job.error);
+    }
+
+    if (job.status === 'pending') {
+        return response.send({ status: 'pending' });
+    }
+
+    // Kept until the TTL, so a result download that gets cut off can be fetched again.
+    return response.send({ status: 'done', image: job.image, format: job.format });
 });
 
 const xai = express.Router();
