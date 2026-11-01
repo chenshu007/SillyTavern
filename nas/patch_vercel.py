@@ -50,7 +50,7 @@ before(cc, "        } else if (request.body.chat_completion_source === CHAT_COMP
        "        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL) {\n            apiUrl = API_VERCEL;\n            apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);\n            headers = {};\n            bodyParams = {};\n")
 # Gateway lists image/video/embedding models too; keep chat models only.
 before(cc, "            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CHUTES && Array.isArray(data?.data)) {\n",
-       "            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL && Array.isArray(data?.data)) {\n                data.data = data.data.filter(model => model?.type === 'language');\n            }\n\n")
+       "            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL && Array.isArray(data?.data)) {\n                data.data = data.data.filter(model => ['language', 'virtual'].includes(model?.type));\n            }\n\n")
 
 sd = 'src/endpoints/stable-diffusion.js'
 before(sd, "const xai = express.Router();\n", r"""const vercel = express.Router();

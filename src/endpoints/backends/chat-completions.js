@@ -2095,7 +2095,7 @@ router.post('/status', async function (request, statusResponse) {
             }
 
             if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL && Array.isArray(data?.data)) {
-                data.data = data.data.filter(model => model?.type === 'language');
+                data.data = data.data.filter(model => ['language', 'virtual'].includes(model?.type));
             }
 
             if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CHUTES && Array.isArray(data?.data)) {
