@@ -251,7 +251,7 @@ async function sendClaudeRequest(request, response) {
         const convertedPrompt = convertClaudeMessages(request.body.messages, request.body.assistant_prefill, useSystemPrompt, useTools, getPromptNames(request));
         // Unanchored to also match prefixed ids passed through proxies, e.g. 'anthropic/claude-fable-5'
         const isFableModel = /claude-fable/.test(request.body.model);
-        const useNativeJsonOutput = /claude-(fable-5-1|opus-5-5)/.test(request.body.model);
+        const isFable51Model = /claude-fable-5-1/.test(request.body.model);
         const isClaude5Model = /claude-(opus-5|sonnet-5)/.test(request.body.model);
         const useThinking = /^claude-(3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7)/.test(request.body.model) || isFableModel || isClaude5Model;
         const useWebSearch = (/^claude-(3-5|3-7|opus-4|sonnet-4|haiku-4-5|opus-4-5|opus-4-6|sonnet-4-6|opus-4-7)/.test(request.body.model) || isFableModel || isClaude5Model) && Boolean(request.body.enable_web_search);
@@ -300,9 +300,9 @@ async function sendClaudeRequest(request, response) {
             }
         }
 
-        // Fable 5.1 and Opus 5.5 reject forced tools, but support native JSON outputs.
+        // Fable 5.1 rejects forced tools, but supports native JSON outputs.
         if (request.body.json_schema) {
-            if (useNativeJsonOutput) {
+            if (isFable51Model) {
                 requestBody.output_config = {
                     format: {
                         type: 'json_schema',
@@ -527,7 +527,7 @@ async function sendMakerSuiteRequest(request, response) {
         const isThinkingConfigModel = m => (/^gemini-2.5-(flash|pro)/.test(m) && !/-image(-preview)?$/.test(m)) || (/^gemini-3[.\d]*-(flash|pro)/.test(m));
         const isImageSizeModel = m => /^gemini-3/.test(m);
         // https://ai.google.dev/gemini-api/docs/latest-model#api-changes-and-parameter-updates
-        const noSamplingModel = /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/.test(model);
+        const noSamplingModel = /gemini-3\.[67]-flash|gemini-3\.5-flash-lite/.test(model);
 
         const noSearchModels = [
             'gemini-2.0-flash-lite',
@@ -2554,6 +2554,16 @@ router.post('/generate', async function (request, response) {
             apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);
             headers = {};
             bodyParams = {};
+            // Claude rejects a conversation that does not end with a user message, which is what Continue sends.
+            if (/^(vmc|anthropic)\//.test(String(request.body.model))) {
+                const messages = request.body.messages;
+                const last = messages?.at(-1);
+                if (last?.role === 'system' && messages.at(-2)?.role === 'assistant') {
+                    last.role = 'user';
+                } else if (last?.role === 'assistant') {
+                    messages.push({ role: 'user', content: '[Continue your last message without repeating its original content.]' });
+                }
+            }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {
             apiUrl = API_COMETAPI;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);
