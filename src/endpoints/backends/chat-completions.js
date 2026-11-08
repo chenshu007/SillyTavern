@@ -2564,6 +2564,14 @@ router.post('/generate', async function (request, response) {
                     messages.push({ role: 'user', content: '[Continue your last message without repeating its original content.]' });
                 }
             }
+            if (/(?:^|\/)claude[-_]/.test(String(request.body.model)) && Array.isArray(request.body.messages)) {
+                if (enableSystemPromptCache) {
+                    cachingSystemPromptForOpenRouter(request.body.messages, cacheTTL);
+                }
+                if (cachingAtDepth !== -1) {
+                    cachingAtDepthForOpenRouterClaude(request.body.messages, cachingAtDepth, cacheTTL);
+                }
+            }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {
             apiUrl = API_COMETAPI;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);

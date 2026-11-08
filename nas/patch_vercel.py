@@ -48,6 +48,21 @@ before(cc, "        } else if (request.body.chat_completion_source === CHAT_COMP
        "        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL) {\n            apiUrl = API_VERCEL;\n            apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);\n            headers = {};\n")
 before(cc, "        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {\n            apiUrl = API_COMETAPI;\n            apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);\n            headers = {};\n            bodyParams = {",
        "        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL) {\n            apiUrl = API_VERCEL;\n            apiKey = readSecret(request.user.directories, SECRET_KEYS.VERCEL, request.body.secret_id);\n            headers = {};\n            bodyParams = {};\n            // Claude rejects a conversation that does not end with a user message, which is what Continue sends.\n            if (/^(vmc|anthropic)\//.test(String(request.body.model))) {\n                const messages = request.body.messages;\n                const last = messages?.at(-1);\n                if (last?.role === \x27system\x27 && messages.at(-2)?.role === \x27assistant\x27) {\n                    last.role = \x27user\x27;\n                } else if (last?.role === \x27assistant\x27) {\n                    messages.push({ role: \x27user\x27, content: \x27[Continue your last message without repeating its original content.]\x27 });\n                }\n            }\n")
+# Prompt-cache markers for Claude models through the gateway, driven by config.yaml claude.*
+# (enableSystemPromptCache / cachingAtDepth / extendedTTL), same helpers as the OpenRouter branch.
+# Off by default: the vmc/ virtual models pin Prompt Caching = Auto in the Vercel dashboard, whose 5m
+# markers are placed by the gateway and collide with manual 1h markers (400 "ttl=1h after ttl=5m").
+# For a 1h TTL: set the virtual model to "No Preference", then cachingAtDepth: 0 + extendedTTL: true.
+after(cc, "                    messages.push({ role: \x27user\x27, content: \x27[Continue your last message without repeating its original content.]\x27 });\n                }\n            }\n",
+      """            if (/(?:^|\\/)claude[-_]/.test(String(request.body.model)) && Array.isArray(request.body.messages)) {
+                if (enableSystemPromptCache) {
+                    cachingSystemPromptForOpenRouter(request.body.messages, cacheTTL);
+                }
+                if (cachingAtDepth !== -1) {
+                    cachingAtDepthForOpenRouterClaude(request.body.messages, cachingAtDepth, cacheTTL);
+                }
+            }
+""")
 # Gateway lists image/video/embedding models too; keep chat models only.
 before(cc, "            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CHUTES && Array.isArray(data?.data)) {\n",
        "            if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERCEL && Array.isArray(data?.data)) {\n                data.data = data.data.filter(model => ['language', 'virtual'].includes(model?.type));\n            }\n\n")
