@@ -9,6 +9,7 @@ import {
     abortStatusCheck,
     cancelStatusCheck,
     characters,
+    chat_metadata,
     event_types,
     eventSource,
     extension_prompt_roles,
@@ -885,6 +886,68 @@ async function populationInjectionPrompts(prompts, messages) {
  * @param type
  * @param cyclePrompt
  */
+// LOCAL PATCH: cache-friendly history trimming. Share of the context window freed per cut.
+const CACHE_TRIM_HEADROOM = 0.10;
+const CACHE_TRIM_KEY = 'cacheTrimSkip';
+
+/**
+ * Drops the oldest included chat messages in chunks so the prompt prefix stays stable between turns.
+ * Stock behavior removes one message per turn once the chat exceeds the budget, which invalidates the
+ * provider's prompt cache every turn. The cut point is kept in chat_metadata until it no longer fits.
+ * @param {ChatCompletion} chatCompletion
+ * @param {object[]} messages Chat prompts, oldest first (as passed to populateChatHistory)
+ * @param {Message[][]} insertedChunks Messages inserted per chat prompt, newest prompt first
+ */
+function applyCacheFriendlyTrim(chatCompletion, messages, insertedChunks) {
+    const naturalSkip = messages.length - insertedChunks.length;
+    if (naturalSkip <= 0) {
+        if (chat_metadata && chat_metadata[CACHE_TRIM_KEY] !== undefined) {
+            delete chat_metadata[CACHE_TRIM_KEY];
+        }
+        return;
+    }
+    const chunks = insertedChunks.slice().reverse(); // oldest first
+    const tokensOf = chunk => chunk.reduce((sum, m) => sum + m.getTokens(), 0);
+    const headroom = Math.floor(Number(oai_settings.openai_max_context) * CACHE_TRIM_HEADROOM);
+    const minKeep = 2;
+    let skip = null;
+    const previous = Number(chat_metadata?.[CACHE_TRIM_KEY]);
+    if (Number.isInteger(previous) && previous >= naturalSkip && previous <= messages.length - minKeep) {
+        const extra = chunks.slice(0, previous - naturalSkip).reduce((sum, c) => sum + tokensOf(c), 0);
+        if (extra <= headroom * 2) {
+            skip = previous; // the old cut point still fits: keep the prefix identical
+        }
+    }
+    if (skip === null) {
+        let freed = 0;
+        let drop = 0;
+        while (drop < chunks.length - minKeep && freed < headroom) {
+            freed += tokensOf(chunks[drop]);
+            drop++;
+        }
+        skip = naturalSkip + drop;
+    }
+    const drop = skip - naturalSkip;
+    if (drop > 0) {
+        const collection = chatCompletion.messages.collection[chatCompletion.findMessageIndex('chatHistory')].collection;
+        let freedTokens = 0;
+        let removed = 0;
+        for (const message of chunks.slice(0, drop).flat()) {
+            const index = collection.indexOf(message);
+            if (index !== -1) {
+                collection.splice(index, 1);
+                freedTokens += message.getTokens();
+                removed++;
+            }
+        }
+        chatCompletion.increaseTokenBudgetBy(freedTokens);
+        console.log(`[Cache trim] ${naturalSkip} oldest message(s) did not fit; dropped ${drop} more (${removed} entries, ${freedTokens} tokens) so the prompt prefix stays stable. Cut at ${skip}/${messages.length}.`);
+    }
+    if (chat_metadata) {
+        chat_metadata[CACHE_TRIM_KEY] = skip;
+    }
+}
+
 async function populateChatHistory(messages, prompts, chatCompletion, type = null, cyclePrompt = null) {
     if (!prompts.has('chatHistory')) {
         return;
@@ -949,6 +1012,8 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 
     // Insert chat messages as long as there is budget available
     const chatPool = [...messages].reverse();
+    /** @type {Message[][]} LOCAL PATCH: messages inserted per chat prompt, for applyCacheFriendlyTrim */
+    const insertedChunks = [];
     for (let index = 0; index < chatPool.length; index++) {
         const chatPrompt = chatPool[index];
 
@@ -1059,6 +1124,7 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
                     chatCompletion.insertAtStart(resultMessage, 'chatHistory');
                 }
                 chatCompletion.insertAtStart(toolCallMessage, 'chatHistory');
+                insertedChunks.push([toolCallMessage, ...toolResultMessages]);
             } else {
                 break;
             }
@@ -1072,10 +1138,14 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 
         if (chatCompletion.canAfford(chatMessage)) {
             chatCompletion.insertAtStart(chatMessage, 'chatHistory');
+            insertedChunks.push([chatMessage]);
         } else {
             break;
         }
     }
+
+    // LOCAL PATCH: drop the oldest messages in chunks so the prompt prefix (and the prompt cache) stays stable.
+    applyCacheFriendlyTrim(chatCompletion, messages, insertedChunks);
 
     // Insert and free new chat
     chatCompletion.freeBudget(newChatMessage);
