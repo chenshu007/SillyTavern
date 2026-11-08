@@ -491,12 +491,12 @@ before(oai, "        if (type !== 'quiet') {\n            const logprobs = parse
 # Once a chat no longer fits the context, stock ST drops exactly one oldest message per turn, so
 # the prompt prefix changes every turn and the provider's prompt cache (Anthropic cache_control,
 # Gemini implicit caching) misses from the start of the history: seen 2026-11-08 as ~78k cache-write
-# tokens on every turn of a 100k-context chat. Drop the oldest messages in chunks instead and keep
+# tokens on every turn of a 100k-context chat. Drop the oldest messages in chunks (15% of the context; 10% held only ~2 turns with ~4.5k-token Opus replies) instead and keep
 # the cut point (chat_metadata.cacheTrimSkip) until the newest messages stop fitting again.
 sub(oai, "    characters,\n    event_types,\n", "    characters,\n    chat_metadata,\n    event_types,\n")
 before(oai, "async function populateChatHistory(messages, prompts, chatCompletion, type = null, cyclePrompt = null) {\n",
        """// LOCAL PATCH: cache-friendly history trimming. Share of the context window freed per cut.
-const CACHE_TRIM_HEADROOM = 0.10;
+const CACHE_TRIM_HEADROOM = 0.15;
 const CACHE_TRIM_KEY = 'cacheTrimSkip';
 
 /**

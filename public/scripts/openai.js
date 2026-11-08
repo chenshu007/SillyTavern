@@ -887,7 +887,7 @@ async function populationInjectionPrompts(prompts, messages) {
  * @param cyclePrompt
  */
 // LOCAL PATCH: cache-friendly history trimming. Share of the context window freed per cut.
-const CACHE_TRIM_HEADROOM = 0.10;
+const CACHE_TRIM_HEADROOM = 0.15;
 const CACHE_TRIM_KEY = 'cacheTrimSkip';
 
 /**
